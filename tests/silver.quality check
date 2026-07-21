@@ -1,0 +1,243 @@
+--===============================
+--check for null or duplicate in primary key
+--===============================
+
+select* from BRONZE.crm_cust_info
+
+select 
+cust_id,
+count(*) as numbers
+from BRONZE.crm_cust_info 
+group by cust_id
+having count(*) >1 or cust_id is null
+-----------------------------------
+--removed the duplicate values 
+------------------------------------
+select*
+from(
+	select*,
+	row_number() over(partition by cust_id order by cust_creationdate desc) flag
+	from BRONZE.crm_cust_info
+	where cust_id is not null
+	)a
+where flag = 1
+
+------------------------------
+--check unwanted spaces 
+--no results
+-------------------------------
+
+select
+cust_firstname
+from bronze.crm_cust_info
+where cust_firstname != trim(cust_firstname)
+
+select
+cust_lastname
+from bronze.crm_cust_info
+where cust_lastname != trim(cust_lastname)
+--check for all string values 
+------------------------------------------------------
+--================================
+--data consistencey & standardization
+--================================
+
+select distinct cust_gndr from BRONZE.crm_cust_info;
+select distinct cust_martialstatus from BRONZE.crm_cust_info;
+
+--------------------------------------------------------
+---------------------------------------
+--quality check of bronze.crm_prd_info
+--=====================================
+--duplicate check
+--=====================================
+select 
+count(*) 
+from BRONZE.crm_prd_info
+group by prd_id
+having count(*) >1 or prd_id is null
+--cleaned prd_id
+-----------------------------------------
+--checking unwanted data 
+
+select 
+trim(prd_nm)
+from BRONZE.crm_prd_info
+where prd_nm !=trim(prd_nm)
+--cleaned data 
+----------------------------------------
+--checking product cost as null of negative
+
+select 
+	prd_cost
+from BRONZE.crm_prd_info
+where prd_cost is null or prd_cost < 0
+-----------------------------------------
+--data standardization and consistency 
+
+select distinct prd_line from BRONZE.crm_prd_info
+----------------------------------------
+--check invalid dates 
+
+select *
+from BRONZE.crm_prd_info
+where prd_start_date >prd_end_date
+
+
+--checking the logic 
+select 
+	prd_id,
+	prd_key,
+	prd_nm,
+	prd_cost,
+	prd_line,
+	prd_start_date,
+	prd_end_date,
+dateadd(day,-1, lead(prd_start_date) over (partition by prd_key ORDER BY prd_start_date)) as prd_end_date_test
+from bronze.crm_prd_info
+where prd_key in (' AC-HE-HL-U509-R','AC-HE-HL-U509' )
+
+------------------------------------------------------------------
+--quality checking of 
+--checking duplicates 
+select
+count(*)
+from BRONZE.erp_cust_AZ12
+group by cust_id
+order by count(*) desc
+
+-----------------------------------
+--checking connection with other table 
+select
+	CASE WHEN cust_id LIKE 'NAS%' then SUBSTRING(cust_id,4,LEN(cust_id))
+	else cust_id
+	end cust_id,
+	cust_birthdate,
+	cust_gender
+from BRONZE.erp_cust_AZ12
+where CASE WHEN cust_id LIKE 'NAS%' then SUBSTRING(cust_id,4,LEN(cust_id))
+	else cust_id
+	end  not in (select distinct cust_key from SILVER.crm_cust_info)
+----------------------------------------------
+--checking quality of bronze.prd_info
+----------------------------------------------
+----------------------------------------
+---data cleaning
+select
+sls_prd_number
+from BRONZE.crm_sales_detail
+where sls_prd_number !=trim(sls_prd_number)
+--cleaned
+------------------------------------------
+--cleaning invalid dates 
+
+select 
+nullif(sls_order_date,0) sls_order_date
+from BRONZE.crm_sales_detail
+where sls_order_date < = 0
+      or len(sls_order_date) != 8 
+      or sls_order_date >20500101
+      or sls_order_date < 19000101
+
+select 
+nullif(sls_ship_date,0) sls_order_date
+from BRONZE.crm_sales_detail
+where sls_ship_date < = 0
+      or len(sls_ship_date) != 8 
+      or sls_ship_date >20500101
+      or sls_ship_date < 19000101
+
+select 
+nullif(sls_due_date,0) sls_order_date
+from BRONZE.crm_sales_detail
+where sls_due_date < = 0
+      or len(sls_due_date) != 8 
+      or sls_due_date >20500101
+      or sls_due_date < 19000101
+
+      select *
+      from BRONZE.crm_sales_detail
+      where sls_order_date > sls_ship_date or
+            sls_order_date > sls_due_date 
+    
+    --checking consistency of quntity ,sales,price
+    --business rule sales = quantity * price 
+     
+     select 
+        sls_sales,
+        sls_quantity,
+        sls_price,
+        case when sls_sales is null or sls_sales <= 0 or sls_sales !=sls_quantity *abs(sls_price) then sls_quantity * abs(sls_price)
+        else sls_sales
+        end as sls_sales,
+        case when sls_price is null or sls_price <= 0 then sls_sales/nullif(sls_quantity,0)
+        else sls_price
+        end sls_price
+     from BRONZE.crm_sales_detail
+     where sls_sales != sls_quantity * sls_price or
+           sls_quantity <= 0 or
+           sls_price <= 0 or
+           sls_sales is null or sls_quantity is null or sls_price is null
+   -- order by sls_sales,sls_quantity,sls_price
+
+-------------------------------------------
+--checking quality of data erp table
+-------------------------------------------
+
+select
+cust_birthdate
+from BRONZE.erp_cust_AZ12
+where cust_birthdate < '1924-01-01' or cust_birthdate > GETDATE()
+
+-------------------------------------------
+--checking last column
+select distinct
+cust_gender,
+	case when upper(trim(cust_gender)) in ('F','Female') then 'Female'
+         when Upper(trim(cust_gender)) in ('M','Male')  then 'Male'
+		 else 'n/a'
+	end cust_gender
+from BRONZE.erp_cust_AZ12
+
+------------------------------------
+select* from silver.erp_cust_AZ12;
+-------------------------------------
+--==================================
+--cleaning and loading erp_loc_a101
+--==================================
+select distinct 
+LOC_COUNTRY,
+CASE WHEN UPPER(TRIM(LOC_COUNTRY)) IN('USA' ,'UNITED STATES','US') THEN 'United State'
+     WHEN UPPER(TRIM(LOC_COUNTRY))= 'DE' THEN 'Germany'
+	 when LOC_COUNTRY is null OR TRIM(LOC_COUNTRY) = '' then 'n/a'
+	 else trim(LOC_COUNTRY)
+END LOC_COUNTRY
+from bronze.erp_LOC_A101 
+
+---------------------------------------
+select
+REPLACE(LOC_ID,'-','')
+from bronze.erp_LOC_A101 
+WHERE REPLACE(LOC_ID,'-','')  NOT IN(SELECT cust_key FROM SILVER.crm_cust_info) 
+
+-----------------------------------------------
+--============================================
+--cleaning the table  bronze.erp_PX_CAT_GQV2
+--============================================
+select distinct PX_CATEGORY FROM BRONZE.erp_PX_CAT_G1V2
+select distinct PX_subcategory FROM BRONZE.erp_PX_CAT_G1V2
+select distinct PX_maintainence FROM BRONZE.erp_PX_CAT_G1V2
+----------------------------------
+--unwanted spaces 
+select
+	trim(PX_id),
+	trim(PX_category),
+	trim(PX_subcategory),
+	trim(PX_maintainence)
+from BRONZE.erp_PX_CAT_G1V2
+where trim(PX_id) != PX_id or
+	trim(PX_category)!= PX_category or
+	trim(PX_subcategory)!= PX_subcategory or
+	trim(PX_maintainence)!= PX_maintainence
+--============================================
+
