@@ -1,0 +1,76 @@
+/*
+===============================================================================
+Quality Checks
+===============================================================================
+Script Purpose:
+    This script performs quality checks to validate the integrity, consistency, 
+    and accuracy of the Gold Layer. These checks ensure:
+    - Uniqueness of surrogate keys in dimension tables.
+    - Referential integrity between fact and dimension tables.
+    - Validation of relationships in the data model for analytical purposes.
+
+Usage Notes:
+    - Investigate and resolve any discrepancies found during the checks.
+===============================================================================
+*/
+
+-- ====================================================================
+-- Checking 'gold.dim_customers'
+-- ====================================================================
+-- Check for Uniqueness of Customer Key in gold.dim_customers
+-- Expectation: No results /*
+===============================================================================
+Quality Checks
+===============================================================================
+Script Purpose:
+    This script performs quality checks to validate the integrity, consistency, 
+    and accuracy of the Gold Layer. These checks ensure:
+    - Uniqueness of surrogate keys in dimension tables.
+    - Referential integrity between fact and dimension tables.
+    - Validation of relationships in the data model for analytical purposes.
+
+Usage Notes:
+    - Investigate and resolve any discrepancies found during the checks.
+===============================================================================
+*/
+
+-- ====================================================================
+-- Checking 'gold.dim_customers'
+-- ====================================================================
+-- Check for Uniqueness of Customer Key in gold.dim_customers
+-- Expectation: No results 
+-----------------------------------------------------
+--checking quality of gold.dim_customers
+select distinct  
+	ci.cust_gndr,
+	ca.cust_gender,
+	CASE WHen ca.cust_gender = 'N/A' then ci.cust_gndr --crm is the master table  
+	     else coalesce(ca.cust_gender,'N/A') 
+    end new_gender
+from SILVER.crm_cust_info ci
+left join SILVER.erp_cust_AZ12 ca
+on ci.cust_key = ca.cust_id
+order by 1,2
+
+---=================================================
+------------------------------------------------------
+--checking the quality of gold>dim.customers 
+
+select distinct  country from GOLD.dim_customers
+select distinct  marital_status from GOLD.dim_customers
+select distinct  gender from GOLD.dim_customers
+---==================================================
+-----==================================================
+--checking data quality in gold.fact_sales 
+-------------------------------------------------
+select* from gold.fact_sales fs
+left join GOLD.dim_customers dc
+on fs.customer_key = dc.customer_key
+left join gold.dim_product p
+on p.product_key = fs.product_key
+where fs.customer_key is null or p.product_key is null
+
+--------------------------
+select* from gold.dim_customers
+select* from gold.dim_product
+select* from gold.fact_sales
